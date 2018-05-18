@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Frontend Documentation</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: directive/form.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * General config of ngForm used throughout the site.
+ * @module
+ */
+'use strict';
+
+app.directive('ngForm', [
+  '$route', '$timeout', '$animate', 'constantService', 'messageService',
+  function ($route, $timeout, $animate, constants, messages) {
+    var pre = function ($scope, $element, $attrs) {
+      var name = $attrs.name || $attrs.ngForm;
+      var form = name &amp;&amp; $scope.$eval(name);
+      if (!form)
+        return;
+
+      form.$element = $element;
+
+      var controls = [];
+
+      /**
+     * Check if the form is dirty.
+     * @class
+     */
+      function checkDirty() {
+        if (!(form.$dirty || form.$submitted) || controls.some(function (control) {
+            return control.$dirty;
+          }))
+            return;
+        /* effectively call form.$setPristine, without the child controls. */
+        $animate.setClass($element, 'ng-pristine', 'ng-dirty ng-submitted');
+        form.$dirty = false;
+        form.$pristine = true;
+        form.$submitted = false;
+        if (form.$$parentForm.subformControl)
+          form.$$parentForm.subformControl.$setPristine();
+      }
+
+      /**
+     * Set the form state back to its unsubmitted state.
+     * @class
+     */
+      form.$setUnsubmitted = function () {
+        if (!form.$submitted || controls.some(function (control) {
+          return control.$submitted;
+        }))
+          return;
+        $animate.removeClass($element, 'ng-submitted');
+        form.$submitted = false;
+        if (form.$$parentForm.$setUnsubmitted)
+          form.$$parentForm.$setUnsubmitted();
+      };
+
+      var $addControl = form.$addControl;
+      var $removeControl = form.$removeControl;
+
+      /* this is unfortunate, just because we can't access the existing controls list. */
+      form.$addControl = function (control) {
+        if ('$pristine' in control)
+          controls.push(control);
+        return $addControl(control);
+      };
+
+      form.$removeControl = function (control) {
+        controls.remove(control);
+        checkDirty();
+        return $removeControl(control);
+      };
+
+      form.subformControl = {
+        $setPristine: checkDirty
+      };
+
+      if ('isolate' in $attrs) {
+        form.$$parentForm.$removeControl(form);
+        form.$setDirty = function() {
+          $animate.removeClass($element, 'ng-pristine');
+          $animate.addClass($element, 'ng-dirty');
+          form.$dirty = true;
+          form.$pristine = false;
+        };
+      }
+      /* it'd be nicer to handle this in $addControl, but it happens too early */
+      else if (form.$$parentForm.subformControl)
+        form.$addControl(form.$$parentForm.subformControl);
+
+      var unclaimed = {};
+      form.validators = {};
+      form.validator = {
+        server: function (res, replace) {
+          messages.clear(form);
+          if ($.isEmptyObject(res)) {
+            res.data = {};
+          } else if (!angular.isObject(res.data)) {
+            messages.addError({
+              body: constants.message('error.generic'),
+              report: res,
+              owner: form
+            });
+            return;
+          }
+
+          var errors = messages.foreachError(res.data);
+          var name;
+          for (name in form.validators) {
+            form.validators[name].server(errors[name] || [], replace);
+            delete errors[name];
+          }
+
+          for (name in errors)
+            messages.add({
+              type: 'red',
+              body: errors[name].join('; '),
+              owner: form
+            });
+        },
+
+        clearServer: function () {
+          _.each(form.validators, function (validator) {
+            validator.server({}, true);
+          });
+        },
+
+        client: function (data, replace) {
+          for (var name in data) {
+            if (!data.hasOwnProperty(name)) {
+              continue;
+            } else if (form.validators[name]) {
+              form.validators[name].client(data[name], replace);
+            } else {
+              unclaimed[name] = data[name];
+            }
+          }
+        },
+
+        add: function (name, validator) {
+          form.validators[name] = validator;
+
+          if (unclaimed[name]) {
+            validator.client(unclaimed[name], true);
+            delete unclaimed[name];
+          }
+        },
+      };
+
+      /**
+     * Pop up a JS confirm dialogue to ask if the user is sure to abandon changes without submitting the form.
+     * @constructor
+     */
+      form.resetAll = function (force, check) {
+        if (!(force || form.$pristine)) {
+          if (!(confirm(constants.message('navigation.confirmation')))) {
+            window.dataLayer.push({
+              'event': 'gtm.confirm',
+              'gtm.confirmAction': 'cancel'
+            });
+            return false;
+          } else {
+            window.dataLayer.push({
+              'event': 'gtm.confirm',
+              'gtm.confirmAction': 'ok'
+            });
+          }
+        } 
+        if (check)
+          return true;
+        var x = window.pageXOffset,
+            y = window.pageYOffset;
+        $route.reload();
+        $timeout(function () {
+          window.scrollTo(x, y);
+        });
+        return true;
+      };
+    };
+
+    return {
+      restrict: 'EA',
+      link: {
+        pre: pre
+      }
+    };
+  }
+]);
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Databrary Frontend AngularJS</a></h2><div><h3>Directives</h3><ul><li><a href="module-directive_clickElsewhere.html">directive/clickElsewhere</a></li><li><a href="module-directive_fileModel.html">directive/fileModel</a></li><li><a href="module-directive_focus.html">directive/focus</a></li><li><a href="module-directive_fold.html">directive/fold</a></li><li><a href="module-directive_form.html">directive/form</a></li><li><a href="module-party_authApply.html">party/authApply</a></li><li><a href="module-party_authGrant.html">party/authGrant</a></li><li><a href="module-party_authSearch.html">party/authSearch</a></li><li><a href="module-party_comments.html">party/comments</a></li><li><a href="module-party_data.html">party/data</a></li><li><a href="module-party_editAccount.html">party/editAccount</a></li><li><a href="module-party_editApply.html">party/editApply</a></li><li><a href="module-party_editGrant.html">party/editGrant</a></li><li><a href="module-party_editNotifications.html">party/editNotifications</a></li><li><a href="module-party_editProfile.html">party/editProfile</a></li><li><a href="module-party_load.html">party/load</a></li><li><a href="module-party_loginForm.html">party/loginForm</a></li><li><a href="module-party_network.html">party/network</a></li><li><a href="module-party_portrait.html">party/portrait</a></li><li><a href="module-party_userPasswordForm.html">party/userPasswordForm</a></li><li><a href="module-site_activity.html">site/activity</a></li><li><a href="module-site_activityChange.html">site/activityChange</a></li><li><a href="module-site_commentReply.html">site/commentReply</a></li><li><a href="module-site_displayAge.html">site/displayAge</a></li><li><a href="module-site_errors.html">site/errors</a></li><li><a href="module-site_figure.html">site/figure</a></li><li><a href="module-site_frame.html">site/frame</a></li><li><a href="module-site_inputAge.html">site/inputAge</a></li><li><a href="module-site_inputCompleter.html">site/inputCompleter</a></li><li><a href="module-site_notifications.html">site/notifications</a></li><li><a href="module-site_panel.html">site/panel</a></li><li><a href="module-site_searchForm.html">site/searchForm</a></li><li><a href="module-site_tagAdd.html">site/tagAdd</a></li><li><a href="module-site_tags.html">site/tags</a></li><li><a href="module-site_toolbar.html">site/toolbar</a></li><li><a href="module-site_tooltip.html">site/tooltip</a></li><li><a href="module-site_wizard.html">site/wizard</a></li><li><a href="module-site_wizardStep.html">site/wizardStep</a></li><li><a href="module-volume_accessGrant.html">volume/accessGrant</a></li><li><a href="module-volume_accessSearch.html">volume/accessSearch</a></li><li><a href="module-volume_assist.html">volume/assist</a></li><li><a href="module-volume_cite.html">volume/cite</a></li><li><a href="module-volume_comments.html">volume/comments</a></li><li><a href="module-volume_design.html">volume/design</a></li><li><a href="module-volume_editAccess.html">volume/editAccess</a></li><li><a href="module-volume_editFunding.html">volume/editFunding</a></li><li><a href="module-volume_editLinks.html">volume/editLinks</a></li><li><a href="module-volume_editOverview.html">volume/editOverview</a></li><li><a href="module-volume_excerpts.html">volume/excerpts</a></li><li><a href="module-volume_filter.html">volume/filter</a></li><li><a href="module-volume_fundingGrant.html">volume/fundingGrant</a></li><li><a href="module-volume_fundingSearch.html">volume/fundingSearch</a></li><li><a href="module-volume_list.html">volume/list</a></li><li><a href="module-volume_metadata.html">volume/metadata</a></li><li><a href="module-volume_meter.html">volume/meter</a></li><li><a href="module-volume_meterCanvas.html">volume/meterCanvas</a></li><li><a href="module-volume_overview.html">volume/overview</a></li><li><a href="module-volume_owners.html">volume/owners</a></li><li><a href="module-volume_pivot.html">volume/pivot</a></li><li><a href="module-volume_showInvestigators.html">volume/showInvestigators</a></li><li><a href="module-volume_slot.html">volume/slot</a></li><li><a href="module-volume_spreadsheet.html">volume/spreadsheet</a></li></ul></div><div><h3>Services</h3><ul><li><a href="analyticService.html">analyticService</a></li><li><a href="authService.html">authService</a></li><li><a href="constantService.html">constantService</a></li><li><a href="displayService.html">displayService</a></li><li><a href="messageService.html">messageService</a></li><li><a href="modelService.html">modelService</a></li><li><a href="Offset.html">Offset</a></li><li><a href="pageService.html">pageService</a></li><li><a href="play.html">play</a></li><li><a href="routerService.html">routerService</a></li><li><a href="searchService.html">searchService</a></li><li><a href="Segment.html">Segment</a></li><li><a href="storageService.html">storageService</a></li><li><a href="styleService.html">styleService</a></li><li><a href="tooltipService.html">tooltipService</a></li><li><a href="uploadService.html">uploadService</a></li></ul></div><div><h3>Controllers</h3><ul><li><a href="party_activity.html">party/activity</a></li><li><a href="party_edit.html">party/edit</a></li><li><a href="party_login.html">party/login</a></li><li><a href="party_profile.html">party/profile</a></li><li><a href="party_register.html">party/register</a></li><li><a href="party_reset.html">party/reset</a></li><li><a href="party_search.html">party/search</a></li><li><a href="party_view.html">party/view</a></li><li><a href="site_home.html">site/home</a></li><li><a href="site_search.html">site/search</a></li><li><a href="volume_activity.html">volume/activity</a></li><li><a href="volume_csv.html">volume/csv</a></li><li><a href="volume_edit.html">volume/edit</a></li><li><a href="volume_search.html">volume/search</a></li><li><a href="volume_slotActivity.html">volume/slotActivity</a></li><li><a href="volume_view.html">volume/view</a></li><li><a href="volume_zip.html">volume/zip</a></li></ul></div><div><h3>Functions</h3><ul><li><a href="-_anonymous_-pre-checkDirty.html">checkDirty</a></li><li><a href="-_anonymous_-pre-form.$setUnsubmitted.html">$setUnsubmitted</a></li><li><a href="-_anonymous_-pre-form.resetAll.html">resetAll</a></li></ul></div>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.5.5</a> on Thu May 17 2018 16:19:25 GMT-0400 (EDT)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
